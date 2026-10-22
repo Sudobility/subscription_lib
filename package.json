@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/subscription_lib",
-  "version": "0.0.49",
+  "version": "0.0.50",
   "description": "Cross-platform subscription management with RevenueCat adapter pattern",
   "type": "module",
   "main": "./dist/index.js",
