@@ -102,21 +102,11 @@ export {
   type UseBackendSubscriptionOptions,
 } from './backend';
 
-// Adapters (platform-specific)
-// Web adapter
-export {
-  configureRevenueCatAdapter,
-  createRevenueCatAdapter,
-  setRevenueCatUser,
-  clearRevenueCatUser,
-  hasRevenueCatUser,
-} from './adapters';
-
-// React Native adapter
-export {
-  configureRevenueCatRNAdapter,
-  createRevenueCatRNAdapter,
-  setRevenueCatRNUser,
-  clearRevenueCatRNUser,
-  hasRevenueCatRNUser,
-} from './adapters';
+// NOTE: Concrete RevenueCat adapters are intentionally NOT exported here.
+// subscription_lib is platform-agnostic business logic and must not pull in a
+// platform SDK (@revenuecat/purchases-js on web, react-native-purchases on RN).
+// The agnostic seam is `initializeSubscription({ adapter })` + the
+// `SubscriptionAdapter` interface above. Concrete adapters live in the platform
+// UI packages and are injected through that seam:
+//   - Web:          @sudobility/subscription_pages    (createRevenueCatAdapter)
+//   - React Native: @sudobility/subscription_pages_rn (createRevenueCatRNAdapter)

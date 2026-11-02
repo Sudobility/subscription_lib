@@ -34,10 +34,12 @@ const subscriptionRefreshListeners: Array<() => void> = [];
  * @example
  * ```typescript
  * import { initializeSubscription } from '@sudobility/subscription_lib';
- * import { createWebRevenueCatAdapter } from './adapters/web';
+ * // Concrete adapter comes from the platform package:
+ * //   web -> @sudobility/subscription_pages, RN -> @sudobility/subscription_pages_rn
+ * import { createRevenueCatAdapter } from '@sudobility/subscription_pages';
  *
  * initializeSubscription({
- *   adapter: createWebRevenueCatAdapter(purchases),
+ *   adapter: createRevenueCatAdapter(),
  *   freeTier: { packageId: 'free', name: 'Free' }
  * });
  * ```
