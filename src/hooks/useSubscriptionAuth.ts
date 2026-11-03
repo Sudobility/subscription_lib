@@ -6,12 +6,13 @@
  * with the current authenticated user.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { setCurrentUser } from '@sudobility/di';
 import {
   getSubscriptionInstance,
   isSubscriptionInitialized,
   onSubscriptionRefresh,
-  setSubscriptionUserId,
+  onSubscriptionUserIdChange,
 } from '../core/singleton';
 
 /**
@@ -59,71 +60,66 @@ export interface UseSubscriptionAuthResult {
 export function useSubscriptionAuth(
   options: UseSubscriptionAuthOptions
 ): UseSubscriptionAuthResult {
-  const { userId, userEmail, isAuthLoading } = options;
+  const { userId, isAuthLoading } = options;
   const [isReady, setIsReady] = useState(false);
   const [entitlements, setEntitlements] = useState<string[]>([]);
-  const syncIdRef = useRef(0);
 
-  // Sync user ID with subscription_lib singleton
+  // Push the current user into di (the fleet's current-user seam). The
+  // subscription singleton syncs the store adapter and clears customer info.
   useEffect(() => {
     if (isAuthLoading) return;
+    setCurrentUser({ userId, isLoggedIn: !!userId });
+  }, [userId, isAuthLoading]);
 
+  // Load customer info and reflect entitlements once the user is synced (the
+  // adapter is ready by the time onSubscriptionUserIdChange fires) and after
+  // refreshes (e.g. a purchase).
+  useEffect(() => {
     let cancelled = false;
-    const currentSyncId = ++syncIdRef.current;
 
-    async function syncUser() {
-      if (!isSubscriptionInitialized()) {
+    async function load() {
+      if (!isSubscriptionInitialized() || !userId) {
+        setEntitlements([]);
+        setIsReady(false);
         return;
       }
-
       try {
-        // Set or clear user
-        await setSubscriptionUserId(userId, userEmail);
-
-        if (cancelled || currentSyncId !== syncIdRef.current) return;
-
-        if (userId) {
-          // Load customer info for authenticated user
-          const service = getSubscriptionInstance();
-          await service.loadCustomerInfo();
-
-          if (cancelled || currentSyncId !== syncIdRef.current) return;
-
-          const sub = service.getCurrentSubscription();
-          setEntitlements(sub?.entitlements ?? []);
-          setIsReady(true);
-        } else {
-          // Anonymous / logged out
-          setEntitlements([]);
-          setIsReady(false);
-        }
+        const service = getSubscriptionInstance();
+        await service.loadCustomerInfo();
+        if (cancelled) return;
+        const sub = service.getCurrentSubscription();
+        setEntitlements(sub?.entitlements ?? []);
+        setIsReady(true);
       } catch (err) {
-        console.error('[useSubscriptionAuth] Failed to sync user:', err);
-        if (!cancelled && currentSyncId === syncIdRef.current) {
+        console.error(
+          '[useSubscriptionAuth] Failed to load subscription:',
+          err
+        );
+        if (!cancelled) {
           setEntitlements([]);
           setIsReady(false);
         }
       }
     }
 
-    syncUser();
+    void load();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, userEmail, isAuthLoading]);
-
-  // Keep entitlements in sync after purchases / refreshes
-  useEffect(() => {
-    const unsubscribe = onSubscriptionRefresh(() => {
+    const unsubscribeUserId = onSubscriptionUserIdChange(() => {
+      void load();
+    });
+    const unsubscribeRefresh = onSubscriptionRefresh(() => {
       if (isSubscriptionInitialized()) {
-        const service = getSubscriptionInstance();
-        const sub = service.getCurrentSubscription();
+        const sub = getSubscriptionInstance().getCurrentSubscription();
         setEntitlements(sub?.entitlements ?? []);
         setIsReady(!!userId);
       }
     });
-    return unsubscribe;
+
+    return () => {
+      cancelled = true;
+      unsubscribeUserId();
+      unsubscribeRefresh();
+    };
   }, [userId]);
 
   return { isReady, entitlements };

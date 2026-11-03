@@ -1,30 +1,24 @@
 /**
  * useSubscriptionUserId Hook
  *
- * The current subscription user id (the Firebase uid the app set via
- * `setSubscriptionUserId`), as reactive state — re-renders when it changes
- * (anonymous → real, sign-out, etc.). The root of the subscription hook chain:
- * `useIsUserSubscribable` and the offering/subscription hooks derive from it.
+ * The current user id, read from `@sudobility/di`'s `UserProvider` (the fleet's
+ * platform-agnostic current user — Firebase uid, wallet address, …), as
+ * reactive state. The root of the subscription hook chain.
  */
 
 import { useEffect, useState } from 'react';
-import {
-  getSubscriptionUserId,
-  onSubscriptionUserIdChange,
-} from '../core/singleton';
+import { getUserProvider } from '@sudobility/di';
 
 /** The current subscription user id, or undefined when none is set. */
 export function useSubscriptionUserId(): string | undefined {
-  const [userId, setUserId] = useState<string | undefined>(
-    getSubscriptionUserId()
+  const [userId, setUserId] = useState<string | undefined>(() =>
+    getUserProvider().getUserId()
   );
 
   useEffect(() => {
-    // Sync in case it changed between first render and effect, then subscribe.
-    setUserId(getSubscriptionUserId());
-    return onSubscriptionUserIdChange(() => {
-      setUserId(getSubscriptionUserId());
-    });
+    const read = () => setUserId(getUserProvider().getUserId());
+    read();
+    return getUserProvider().subscribe(read);
   }, []);
 
   return userId;

@@ -8,10 +8,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CurrentSubscription } from '../types/subscription';
 import {
   getSubscriptionInstance,
-  getSubscriptionUserId,
   isSubscriptionInitialized,
   onSubscriptionRefresh,
-  setSubscriptionUserId,
+  onSubscriptionUserIdChange,
 } from '../core/singleton';
 import { useIsUserSubscribable } from './useIsUserSubscribable';
 
@@ -70,25 +69,28 @@ let refetchWarned = false;
  * ```
  */
 export function useUserSubscription(
-  options?: UseUserSubscriptionOptions
+  _options?: UseUserSubscriptionOptions
 ): UseUserSubscriptionResult {
-  const { userId, userEmail } = options ?? {};
+  // Note: the current user comes from `@sudobility/di` (set by the app at its
+  // auth boundary) and is synced to the store adapter by the subscription
+  // singleton. `_options.userId`/`userEmail` are accepted for backwards
+  // compatibility but no longer drive the user — di does.
   const [subscription, setSubscription] = useState<CurrentSubscription | null>(
     null
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const loadIdRef = useRef(0);
-  // The active subscription derives from the userId through this: it loads only
+  // The active subscription derives from the user through this: it loads only
   // for a user who can subscribe (on IAP any userId; on web a logged-in one).
   const subscribable = useIsUserSubscribable();
 
-  // Set user and load data in a single sequential flow to avoid race conditions
   useEffect(() => {
     let cancelled = false;
-    const currentLoadId = ++loadIdRef.current;
 
-    async function initAndLoad() {
+    async function load() {
+      const currentLoadId = ++loadIdRef.current;
+
       if (!subscribable) {
         setSubscription(null);
         setError(null);
@@ -105,14 +107,6 @@ export function useUserSubscription(
       try {
         setIsLoading(true);
         setError(null);
-
-        // Set user ID first (await ensures adapter is ready before loading)
-        const currentLibUserId = getSubscriptionUserId();
-        if (userId !== undefined && userId !== currentLibUserId) {
-          await setSubscriptionUserId(userId, userEmail);
-        }
-
-        if (cancelled || currentLoadId !== loadIdRef.current) return;
 
         const service = getSubscriptionInstance();
         await service.loadCustomerInfo();
@@ -135,22 +129,26 @@ export function useUserSubscription(
       }
     }
 
-    initAndLoad();
+    void load();
 
-    // Subscribe to subscription refresh events (e.g., after purchase)
+    // Reload when the user changes (fired by the singleton after the adapter's
+    // user has been synced) and on refresh events (e.g. after a purchase).
+    const unsubscribeUserId = onSubscriptionUserIdChange(() => {
+      void load();
+    });
     const unsubscribeRefresh = onSubscriptionRefresh(() => {
       if (isSubscriptionInitialized()) {
         const service = getSubscriptionInstance();
-        const currentSub = service.getCurrentSubscription();
-        setSubscription(currentSub);
+        setSubscription(service.getCurrentSubscription());
       }
     });
 
     return () => {
       cancelled = true;
+      unsubscribeUserId();
       unsubscribeRefresh();
     };
-  }, [userId, userEmail, subscribable]);
+  }, [subscribable]);
 
   const update = useCallback(async () => {
     if (!isSubscriptionInitialized()) return;

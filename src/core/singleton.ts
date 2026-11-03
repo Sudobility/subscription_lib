@@ -4,6 +4,7 @@
  * Global singleton manager for the SubscriptionService.
  */
 
+import { getUserProvider } from '@sudobility/di';
 import type { SubscriptionAdapter } from '../types/adapter';
 import type { FreeTierConfig } from '../types/subscription';
 import { SubscriptionService } from './service';
@@ -20,9 +21,33 @@ export interface SubscriptionConfig {
 
 let instance: SubscriptionService | null = null;
 let currentAdapter: SubscriptionAdapter | null = null;
-let currentUserId: string | undefined = undefined;
+// The last user id we synced into the adapter, to skip redundant work.
+let lastSyncedUserId: string | undefined = undefined;
+let unsubscribeUser: (() => void) | null = null;
 const userIdChangeListeners: Array<() => void> = [];
 const subscriptionRefreshListeners: Array<() => void> = [];
+
+/**
+ * Sync the adapter's user from `@sudobility/di`'s UserProvider (the fleet's
+ * current user). Runs on init and whenever the provider changes. Awaits the
+ * adapter so customer-info reloads (triggered via the listeners below) see the
+ * right RevenueCat user.
+ */
+async function syncUserFromProvider(): Promise<void> {
+  const userId = getUserProvider().getUserId();
+  if (userId === lastSyncedUserId) {
+    return;
+  }
+  lastSyncedUserId = userId;
+  if (currentAdapter?.setUserId) {
+    await currentAdapter.setUserId(userId);
+  }
+  // Clear only customer info cache (preserve offerings), then notify.
+  instance?.clearCustomerInfo();
+  for (const listener of userIdChangeListeners) {
+    listener();
+  }
+}
 
 /**
  * Initialize the subscription singleton
@@ -50,6 +75,15 @@ export function initializeSubscription(config: SubscriptionConfig): void {
     adapter: config.adapter,
     freeTier: config.freeTier,
   });
+  // Drive the adapter's user from di's UserProvider. The app pushes the current
+  // user (Firebase, wallet, …) via di `setCurrentUser`; we sync it to the
+  // store adapter and reload customer info on change.
+  lastSyncedUserId = undefined;
+  unsubscribeUser?.();
+  unsubscribeUser = getUserProvider().subscribe(() => {
+    void syncUserFromProvider();
+  });
+  void syncUserFromProvider();
 }
 
 /**
@@ -87,6 +121,9 @@ export function isSubscriptionNativeIap(): boolean {
  */
 export function resetSubscription(): void {
   instance = null;
+  unsubscribeUser?.();
+  unsubscribeUser = null;
+  lastSyncedUserId = undefined;
 }
 
 /**
@@ -147,57 +184,12 @@ export async function restoreSubscription(): Promise<
 }
 
 /**
- * Set the user ID for the subscription service.
- * This will re-initialize RevenueCat with the new user and reload customer info.
- * Offerings (product catalog) are preserved since they don't change with user.
- *
- * @param userId User identifier, or undefined to clear (logout)
- * @param email Optional email for the user
- *
- * @example
- * ```typescript
- * import { setSubscriptionUserId } from '@sudobility/subscription_lib';
- *
- * // On login
- * await setSubscriptionUserId(user.uid, user.email);
- *
- * // On logout
- * await setSubscriptionUserId(undefined);
- * ```
- */
-export async function setSubscriptionUserId(
-  userId: string | undefined,
-  email?: string
-): Promise<void> {
-  // Skip if same user
-  if (currentUserId === userId) {
-    return;
-  }
-
-  console.log('[subscription_lib] Setting user ID:', { userId, email });
-  currentUserId = userId;
-
-  // Call adapter's setUserId if available
-  if (currentAdapter?.setUserId) {
-    await currentAdapter.setUserId(userId, email);
-  }
-
-  // Clear only customer info cache (preserve offerings)
-  if (instance) {
-    instance.clearCustomerInfo();
-  }
-
-  // Notify listeners (so they can reload customer info)
-  for (const listener of userIdChangeListeners) {
-    listener();
-  }
-}
-
-/**
- * Get the current user ID
+ * Get the current user ID (from `@sudobility/di`'s UserProvider). The app sets
+ * the current user via di `setCurrentUser` at its auth boundary; subscription_lib
+ * no longer owns a separate user id.
  */
 export function getSubscriptionUserId(): string | undefined {
-  return currentUserId;
+  return getUserProvider().getUserId();
 }
 
 /**

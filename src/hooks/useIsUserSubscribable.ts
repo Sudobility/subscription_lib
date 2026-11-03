@@ -3,31 +3,47 @@
  *
  * Whether the current user can start a subscription purchase. The single source
  * of truth for the "can subscribe?" rule; every subscription UI and the
- * offering/active-subscription hooks gate on this, never on `userId` or
- * `isLoggedIn` directly.
+ * offering/active-subscription hooks gate on this, never on `userId` or login
+ * state directly.
  *
- * Fully derived (zero-arg), rooted at the Firebase userId:
+ * Fully derived (zero-arg), rooted at the current user:
  *
- *   Firebase userId → useIsUserSubscribable → offerings & active subscription
+ *   di UserProvider (userId + isLoggedIn) → useIsUserSubscribable → offerings & active subscription
  *
- * - **Native IAP** (Apple / Google — the adapter's `usesNativeIap`): RevenueCat
+ * - **Native IAP** (Apple / Google — the adapter's `usesNativeIap`): the store
  *   buys against the (possibly anonymous) app user, so a `userId` is enough.
- * - **Web billing**: the purchase needs a logged-in real account, i.e.
- *   `useIsLoggedIn()` (= a userId that is not anonymous).
+ * - **Web billing**: the purchase needs a logged-in real account, i.e. the
+ *   provider's `isLoggedIn()` (a userId that is not anonymous / a connected
+ *   wallet / …).
  *
- * `useIsLoggedIn` comes from `@sudobility/auth_lib`; both the web and RN apps
- * provide its context via `createFirebaseAuthContext`.
+ * The current user comes from `@sudobility/di` so this works for any auth
+ * system (Firebase, wallet, …) — subscription_lib does not depend on auth_lib.
  */
 
-import { useIsLoggedIn } from '@sudobility/auth_lib/auth-js';
+import { useEffect, useState } from 'react';
+import { getUserProvider } from '@sudobility/di';
 import { isSubscriptionNativeIap } from '../core/singleton';
-import { useSubscriptionUserId } from './useSubscriptionUserId';
 
 /** Returns whether the user can begin a subscription purchase. */
 export function useIsUserSubscribable(): boolean {
-  const userId = useSubscriptionUserId();
-  const isLoggedIn = useIsLoggedIn();
+  const [state, setState] = useState<{
+    userId: string | undefined;
+    isLoggedIn: boolean;
+  }>(() => {
+    const p = getUserProvider();
+    return { userId: p.getUserId(), isLoggedIn: p.isLoggedIn() };
+  });
+
+  useEffect(() => {
+    const read = () => {
+      const p = getUserProvider();
+      setState({ userId: p.getUserId(), isLoggedIn: p.isLoggedIn() });
+    };
+    read();
+    return getUserProvider().subscribe(read);
+  }, []);
+
   // Which store this platform bills through is fixed at init, so a plain read.
   const usesNativeIap = isSubscriptionNativeIap();
-  return usesNativeIap ? !!userId : isLoggedIn;
+  return usesNativeIap ? !!state.userId : state.isLoggedIn;
 }
