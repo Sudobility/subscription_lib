@@ -13,6 +13,7 @@ export {
   restoreSubscription,
   setSubscriptionUserId,
   getSubscriptionUserId,
+  isSubscriptionNativeIap,
   onSubscriptionUserIdChange,
   onSubscriptionRefresh,
   type SubscriptionConfig,

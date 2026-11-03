@@ -145,6 +145,15 @@ export interface AdapterPurchaseResult {
  */
 export interface SubscriptionAdapter {
   /**
+   * Whether this adapter bills through native in-app purchase (Apple / Google
+   * StoreKit/Play Billing) rather than web billing. Native IAP can purchase
+   * against an anonymous app user; web billing requires a logged-in account.
+   * `useIsUserSubscribable` reads this to decide whether a userId alone is
+   * enough to subscribe. Defaults to false (web billing) when omitted.
+   */
+  usesNativeIap?: boolean;
+
+  /**
    * Get all configured offerings
    * @param params Optional parameters like currency
    */

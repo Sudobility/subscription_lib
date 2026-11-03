@@ -12,6 +12,7 @@ import {
   getSubscriptionInstance,
   isSubscriptionInitialized,
 } from '../core/singleton';
+import { useIsUserSubscribable } from './useIsUserSubscribable';
 
 /**
  * Result of useAllOfferings hook
@@ -53,8 +54,18 @@ export function useAllOfferings(): UseAllOfferingsResult {
   const [offerings, setOfferings] = useState<SubscriptionOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // Offerings derive from the userId through this: only a user who can
+  // subscribe loads them (on IAP that is any userId; on web, a logged-in one).
+  const subscribable = useIsUserSubscribable();
 
   const loadData = useCallback(async () => {
+    if (!subscribable) {
+      setOfferings([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     if (!isSubscriptionInitialized()) {
       setError(new Error('Subscription not initialized'));
       setIsLoading(false);
@@ -83,15 +94,16 @@ export function useAllOfferings(): UseAllOfferingsResult {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [subscribable]);
 
-  // Load data on mount only - offerings don't change with user
+  // Load when mounted and whenever subscribability changes (e.g. the userId
+  // arrives, or the user signs in/out).
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const refetch = useCallback(async () => {
-    if (!isSubscriptionInitialized()) return;
+    if (!subscribable || !isSubscriptionInitialized()) return;
 
     const service = getSubscriptionInstance();
     try {

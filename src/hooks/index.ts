@@ -25,6 +25,10 @@ export {
 
 export { useEntitlements, type UseEntitlementsResult } from './useEntitlements';
 
+export { useSubscriptionUserId } from './useSubscriptionUserId';
+
+export { useIsUserSubscribable } from './useIsUserSubscribable';
+
 export {
   useSubscriptionAuth,
   type UseSubscriptionAuthOptions,

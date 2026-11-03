@@ -74,6 +74,15 @@ export function isSubscriptionInitialized(): boolean {
 }
 
 /**
+ * Whether the configured adapter bills through native in-app purchase (Apple /
+ * Google) rather than web billing. Used by `useIsUserSubscribable`. False when
+ * no adapter is configured or the adapter does not set the flag.
+ */
+export function isSubscriptionNativeIap(): boolean {
+  return currentAdapter?.usesNativeIap ?? false;
+}
+
+/**
  * Reset the subscription singleton (mainly for testing)
  */
 export function resetSubscription(): void {

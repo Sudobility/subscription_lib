@@ -13,6 +13,7 @@ import {
   onSubscriptionRefresh,
   setSubscriptionUserId,
 } from '../core/singleton';
+import { useIsUserSubscribable } from './useIsUserSubscribable';
 
 /**
  * Result of useUserSubscription hook
@@ -78,6 +79,9 @@ export function useUserSubscription(
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const loadIdRef = useRef(0);
+  // The active subscription derives from the userId through this: it loads only
+  // for a user who can subscribe (on IAP any userId; on web a logged-in one).
+  const subscribable = useIsUserSubscribable();
 
   // Set user and load data in a single sequential flow to avoid race conditions
   useEffect(() => {
@@ -85,6 +89,13 @@ export function useUserSubscription(
     const currentLoadId = ++loadIdRef.current;
 
     async function initAndLoad() {
+      if (!subscribable) {
+        setSubscription(null);
+        setError(null);
+        setIsLoading(false);
+        return;
+      }
+
       if (!isSubscriptionInitialized()) {
         setError(new Error('Subscription not initialized'));
         setIsLoading(false);
@@ -139,7 +150,7 @@ export function useUserSubscription(
       cancelled = true;
       unsubscribeRefresh();
     };
-  }, [userId, userEmail]);
+  }, [userId, userEmail, subscribable]);
 
   const update = useCallback(async () => {
     if (!isSubscriptionInitialized()) return;

@@ -15,6 +15,7 @@ export {
   restoreSubscription,
   setSubscriptionUserId,
   getSubscriptionUserId,
+  isSubscriptionNativeIap,
   onSubscriptionUserIdChange,
   onSubscriptionRefresh,
   SubscriptionService,
@@ -36,6 +37,8 @@ export {
 // Hooks (active)
 export {
   useUserSubscription,
+  useSubscriptionUserId,
+  useIsUserSubscribable,
   useEntitlements,
   useSubscriptionAuth,
   type UseUserSubscriptionResult,
