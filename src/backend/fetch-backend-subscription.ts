@@ -14,15 +14,27 @@ export async function fetchBackendSubscription(
   baseUrl: string,
   token: string,
   userId: string,
-  testMode?: boolean
+  testMode?: boolean,
+  /**
+   * Whether the caller is on a native-IAP platform (App Store / Play Store /
+   * Mac App Store). The backend admits an anonymous (guest) caller to read
+   * their own subscription only when this is set — on native IAP a guest can
+   * hold a real subscription bought against their anonymous app-user id.
+   * Omitted/false for web billing, where an anonymous caller is still rejected.
+   */
+  nativeIap?: boolean
 ): Promise<BackendSubscriptionResult> {
   if (!userId || userId.length === 0 || userId.length > 128) {
     throw new Error(`Invalid userId: "${userId}". Expected 1-128 characters`);
   }
 
   const endpoint = `/api/v1/users/${encodeURIComponent(userId)}/subscriptions`;
-  const url = testMode
-    ? `${baseUrl}${endpoint}?testMode=true`
+  const params = new URLSearchParams();
+  if (testMode) params.set('testMode', 'true');
+  if (nativeIap) params.set('nativeIap', 'true');
+  const query = params.toString();
+  const url = query
+    ? `${baseUrl}${endpoint}?${query}`
     : `${baseUrl}${endpoint}`;
 
   const response = await networkClient.get<BackendResponse>(url, {

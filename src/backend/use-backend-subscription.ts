@@ -11,6 +11,11 @@ export interface UseBackendSubscriptionOptions extends Omit<
   'queryKey' | 'queryFn'
 > {
   testMode?: boolean;
+  /**
+   * Whether the caller is on a native-IAP platform. Lets an anonymous guest
+   * read their own subscription (see {@link fetchBackendSubscription}).
+   */
+  nativeIap?: boolean;
 }
 
 export function useBackendSubscription(
@@ -20,7 +25,7 @@ export function useBackendSubscription(
   userId: string,
   options?: UseBackendSubscriptionOptions
 ): UseQueryResult<BackendSubscriptionResult> {
-  const { testMode, ...queryOptions } = options ?? {};
+  const { testMode, nativeIap, ...queryOptions } = options ?? {};
 
   const isEnabled =
     !!userId &&
@@ -28,9 +33,16 @@ export function useBackendSubscription(
     (queryOptions.enabled !== undefined ? queryOptions.enabled : true);
 
   return useQuery({
-    queryKey: ['subscription', 'backend', userId] as const,
+    queryKey: ['subscription', 'backend', userId, !!nativeIap] as const,
     queryFn: () =>
-      fetchBackendSubscription(networkClient, baseUrl, token, userId, testMode),
+      fetchBackendSubscription(
+        networkClient,
+        baseUrl,
+        token,
+        userId,
+        testMode,
+        nativeIap
+      ),
     staleTime: 2 * 60 * 1000, // 2 minutes
     ...queryOptions,
     enabled: isEnabled,
