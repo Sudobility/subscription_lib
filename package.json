@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/subscription_lib",
-  "version": "0.0.65",
+  "version": "0.0.66",
   "description": "Cross-platform subscription management with RevenueCat adapter pattern",
   "type": "module",
   "main": "./dist/index.js",
@@ -30,8 +30,8 @@
     "prepublishOnly": "bun run verify"
   },
   "peerDependencies": {
-    "@sudobility/di": "^1.5.85",
-    "@sudobility/types": "^1.9.78",
+    "@sudobility/di": "^1.5.86",
+    "@sudobility/types": "^1.9.79",
     "@tanstack/react-query": "^5.0.0",
     "react": "^18.0.0 || ^19.0.0"
   },
@@ -42,8 +42,8 @@
   },
   "devDependencies": {
     "@eslint/js": "~10.0.1",
-    "@sudobility/di": "^1.5.85",
-    "@sudobility/types": "^1.9.78",
+    "@sudobility/di": "^1.5.86",
+    "@sudobility/types": "^1.9.79",
     "@tanstack/react-query": "~5.104.5",
     "@types/bun": "~1.4.4",
     "@types/node": "~26.6.5",

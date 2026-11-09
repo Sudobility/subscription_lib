@@ -1,95 +1,180 @@
 # @sudobility/subscription_lib
 
-Cross-platform subscription management library that abstracts RevenueCat SDK differences between web and React Native behind a unified adapter interface.
+Cross-platform subscription **business logic** for RevenueCat-backed apps. It
+provides a platform-agnostic `SubscriptionAdapter` seam, a global service
+singleton, React hooks for offerings / entitlements / purchase eligibility, and
+a small backend-API client.
+
+The package deliberately contains **no platform SDK**. Concrete RevenueCat
+adapters (web `@revenuecat/purchases-js`, RN `react-native-purchases`) live in
+the platform UI packages and are injected at init:
+
+- Web: `@sudobility/subscription_pages` (`createRevenueCatAdapter`)
+- React Native: `@sudobility/subscription_pages_rn` (`createRevenueCatRNAdapter`)
+
+The current user is read from `@sudobility/di`'s `UserProvider`, so this library
+works with any auth system (Firebase, wallet, …) and never depends on an auth
+library directly.
+
+- **Package**: `@sudobility/subscription_lib` (v0.0.65)
+- **License**: BUSL-1.1
+- **Registry**: GitHub Packages (`@sudobility` scope → `npm.pkg.github.com`)
+- **Module format**: ESM only
 
 ## Installation
+
+The `@sudobility` scope resolves to GitHub Packages. Ensure your project's
+`.npmrc` contains:
+
+```
+@sudobility:registry=https://npm.pkg.github.com
+```
+
+Then:
 
 ```bash
 bun add @sudobility/subscription_lib
 ```
 
-### Peer Dependencies
+### Peer dependencies
 
-- `react` ^18.0.0 || ^19.0.0
-- `@sudobility/types` ^1.9.53
-- `@revenuecat/purchases-js` ^1.0.0 (web only, optional)
-- `react-native-purchases` >= 7.0.0 (React Native only, optional)
+| Package | Version | Required |
+|---|---|---|
+| `react` | `^18 \|\| ^19` | Yes |
+| `@sudobility/di` | `^1.5.85` | Yes (current-user provider) |
+| `@sudobility/types` | `^1.9.78` | Yes (`SubscriptionPeriod`, `NetworkClient`, …) |
+| `@tanstack/react-query` | `^5` | Optional (only for the backend hook) |
 
 ## Usage
 
 ```typescript
-import {
-  initializeSubscription,
-  configureRevenueCatAdapter,
-  createRevenueCatAdapter,
-  useSubscriptions,
-  useUserSubscription,
-  useSubscribable,
-} from '@sudobility/subscription_lib';
+import { initializeSubscription } from '@sudobility/subscription_lib';
+// Concrete adapter comes from the platform package (NOT from this lib):
+import { createRevenueCatAdapter } from '@sudobility/subscription_pages';
 
-// App startup
-configureRevenueCatAdapter(REVENUECAT_API_KEY);
+// App startup — call once.
 initializeSubscription({
   adapter: createRevenueCatAdapter(),
-  freeTier: { packageId: 'free', displayName: 'Free' },
+  freeTier: { packageId: 'free', name: 'Free' }, // FreeTierConfig: { packageId, name }
 });
+```
 
-// React hooks
-const { offer, isLoading } = useSubscriptions('default');
+Keep the subscription user in sync with your auth state at the app root:
+
+```tsx
+import { useSubscriptionAuth } from '@sudobility/subscription_lib';
+
+function SubscriptionInitializer({ children }) {
+  const { user, loading } = useAuthStatus(); // your auth hook
+  const { isReady, entitlements } = useSubscriptionAuth({
+    userId: !loading && user && !user.isAnonymous ? user.uid : undefined,
+    userEmail: user?.email ?? undefined,
+    isAuthLoading: loading,
+  });
+  // ...
+}
+```
+
+Consume subscription data in components:
+
+```tsx
+import {
+  useAllOfferings,
+  usePackagesByDuration,
+  useUserSubscription,
+  useEntitlements,
+} from '@sudobility/subscription_lib';
+
+const { offerings, isLoading } = useAllOfferings();
+const { packagesByDuration, availableDurations } = usePackagesByDuration();
 const { subscription } = useUserSubscription();
-const { subscribablePackageIds } = useSubscribable('default');
+const { entitlements } = useEntitlements();
 ```
 
 ## API
 
-### Core Singleton
+### Core (service singleton)
 
 | Function | Description |
 |----------|-------------|
-| `initializeSubscription(config)` | Initialize with adapter + free tier config |
-| `setSubscriptionUserId(id, email?)` | Set current user, triggers reload |
-| `refreshSubscription()` | Reload offerings + customer info |
-| `getSubscriptionInstance()` | Get the SubscriptionService singleton |
+| `initializeSubscription(config)` | Initialize once with `{ adapter, freeTier }`. Subscribes to `@sudobility/di` and syncs the current user into the adapter. |
+| `getSubscriptionInstance()` | Get the `SubscriptionService` singleton (throws if not initialized). |
+| `isSubscriptionInitialized()` | Whether `initializeSubscription` has run. |
+| `isSubscriptionNativeIap()` | Whether the adapter bills via native IAP (`adapter.usesNativeIap`). |
+| `refreshSubscription()` | Reload offerings + customer info; notify refresh listeners. Call after a purchase. |
+| `restoreSubscription()` | Restore purchases from the store; returns the updated `CurrentSubscription \| null`. |
+| `resetSubscription()` | Tear down the singleton (mainly for tests). |
+| `getSubscriptionUserId()` | Current user id (from `@sudobility/di`). |
+| `onSubscriptionUserIdChange(fn)` / `onSubscriptionRefresh(fn)` | Event subscriptions; return an unsubscribe function. |
+| `SubscriptionService` | The service class (exported for advanced/custom use). |
 
 ### Hooks
 
+**Active**
+
 | Hook | Description |
 |------|-------------|
-| `useSubscriptions(offerId)` | Fetch offer/product catalog (cached) |
-| `useUserSubscription()` | Current user subscription status |
-| `useSubscriptionPeriods(offerId)` | Available billing periods, sorted |
-| `useSubscriptionForPeriod(offerId, period)` | Packages for a period, sorted by price |
-| `useSubscribable(offerId)` | Upgrade-eligible package IDs |
+| `useSubscriptionAuth({ userId, userEmail?, isAuthLoading })` | Pushes auth state into `@sudobility/di` and loads customer info. Returns `{ isReady, entitlements }`. Call once at app root. |
+| `useUserSubscription()` | Current subscription status: `{ subscription, isLoading, error, update }` (`refetch` is a deprecated alias of `update`). |
+| `useEntitlements()` | Active entitlement IDs: `{ entitlements, isLoading }`. |
+| `useSubscriptionUserId()` | Reactive current user id from `@sudobility/di`. |
+| `useIsUserSubscribable()` | `boolean` — can the user start a purchase? (native IAP needs a userId; web needs a logged-in account). The gate every other hook derives from. |
 
-### Built-in Adapters
+**Multi-offering**
 
-- **Web**: `configureRevenueCatAdapter`, `createRevenueCatAdapter`, `setRevenueCatUser`, `clearRevenueCatUser`
-- **React Native**: `configureRevenueCatRNAdapter`, `createRevenueCatRNAdapter`, `setRevenueCatRNUser`, `clearRevenueCatRNUser`
+| Hook | Description |
+|------|-------------|
+| `useAllOfferings()` | All offerings sorted by id: `{ offerings, isLoading, error, refetch }`. |
+| `useOfferingPackages(offerId, offerings?)` | Packages for one offering, sorted by period: `{ packages, isLoading, error }`. |
+| `usePackagesByDuration()` | Packages across all offerings grouped by billing period: `{ packagesByDuration, availableDurations, isLoading, error, refetch }`. |
+
+**Deprecated** (kept for backwards compatibility — prefer the ones above):
+`useSubscriptions`, `useSubscriptionPeriods`, `useSubscriptionForPeriod`,
+`useSubscribable`.
+
+### Backend API client
+
+| Export | Description |
+|--------|-------------|
+| `fetchBackendSubscription(networkClient, baseUrl, token, userId, testMode?, nativeIap?)` | GET `/api/v1/users/:id/subscriptions`; returns a `BackendSubscriptionResult`. |
+| `useBackendSubscription(networkClient, baseUrl, token, userId, options?)` | React Query wrapper (requires `@tanstack/react-query`). 2-minute `staleTime`; enabled only with `userId` + `token`. |
 
 ### Utilities
 
-`parseISO8601Period`, `getPeriodRank`, `comparePeriods`, `calculatePackageLevels`, `findUpgradeablePackages`
+`parseISO8601Period`, `packageTypeToPeriod`, `getPeriodRank`, `comparePeriods`,
+`isPeriodGreaterOrEqual`, `periodToMonths`, `calculatePackageLevels`,
+`addLevelsToPackages`, `getPackageLevel`, `findUpgradeablePackages`,
+`mapStoreToPlatform`.
 
-### Key Types
+### Key types
 
-`SubscriptionAdapter`, `SubscriptionOffer`, `SubscriptionPackage`, `CurrentSubscription`, `FreeTierConfig`, `SubscriptionPeriod`
+`SubscriptionAdapter`, `AdapterOfferings`, `AdapterOffering`, `AdapterPackage`,
+`AdapterProduct`, `AdapterCustomerInfo`, `AdapterEntitlementInfo`,
+`AdapterPurchaseParams`, `AdapterPurchaseResult`, `SubscriptionOffer`,
+`SubscriptionPackage`, `SubscriptionProduct`, `CurrentSubscription`,
+`FreeTierConfig`, `PackageWithLevel`, `SubscriptionConfig`,
+`SubscriptionServiceConfig`. `SubscriptionPeriod` / `PERIOD_RANKS` /
+`ALL_PERIODS` come from `@sudobility/types`.
 
 ## Development
 
 ```bash
-bun run build        # Compile TS to dist/
-bun run dev          # Watch mode (tsc --watch)
-bun test             # Run tests (vitest run)
-bun run typecheck    # TypeScript check
-bun run lint         # ESLint
-bun run format       # Prettier
+bun run build          # tsc -> dist/, then scripts/fix-esm-imports.mjs
+bun run dev            # tsc --watch
+bun run clean          # rm -rf dist
+bun run typecheck      # tsc --noEmit
+bun run lint           # eslint src
+bun run lint:fix       # eslint src --fix
+bun run format         # prettier --write
+bun run test:unit      # vitest run
+bun run test:watch     # vitest (watch)
+bun run verify         # typecheck + lint + test:unit + build
 ```
 
-Pre-commit:
+> Use `bun run test:unit`, **not** `bun test` — the latter invokes Bun's own
+> test runner instead of Vitest.
 
-```bash
-bun run typecheck && bun run lint && bun test && bun run build
-```
+Pre-publish gate (`prepublishOnly`) runs `bun run verify`.
 
 ## License
 
