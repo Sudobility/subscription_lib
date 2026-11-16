@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { NetworkClient } from '@sudobility/types';
+import { SubscriptionPlatform, type NetworkClient } from '@sudobility/types';
 import { fetchBackendSubscription } from './fetch-backend-subscription';
-import { SubscriptionPlatform } from '@sudobility/types';
 
 function createMockNetworkClient(
   response: unknown,

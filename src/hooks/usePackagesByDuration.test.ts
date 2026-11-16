@@ -5,8 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { SubscriptionOffer } from '../types/subscription';
-import type { SubscriptionPeriod } from '@sudobility/types';
-import { ALL_PERIODS } from '@sudobility/types';
+import { ALL_PERIODS, type SubscriptionPeriod } from '@sudobility/types';
 import type { PackageWithOffer } from './usePackagesByDuration';
 
 /**

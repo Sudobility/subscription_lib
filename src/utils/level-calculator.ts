@@ -10,8 +10,7 @@ import type {
   PackageWithLevel,
   SubscriptionPackage,
 } from '../types/subscription';
-import type { SubscriptionPeriod } from '@sudobility/types';
-import { PERIOD_RANKS } from '@sudobility/types';
+import { PERIOD_RANKS, type SubscriptionPeriod } from '@sudobility/types';
 
 /**
  * Calculate entitlement levels for packages.
